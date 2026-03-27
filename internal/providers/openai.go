@@ -18,14 +18,15 @@ import (
 // OpenAIProvider implements Provider for OpenAI-compatible APIs
 // (OpenAI, Groq, OpenRouter, DeepSeek, VLLM, etc.)
 type OpenAIProvider struct {
-	name         string
-	apiKey       string
-	apiBase      string
-	chatPath     string // defaults to "/chat/completions"
-	defaultModel string
-	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
-	client       *http.Client
-	retryConfig  RetryConfig
+	name            string
+	apiKey          string
+	apiBase         string
+	chatPath        string // defaults to "/chat/completions"
+	defaultModel    string
+	providerType    string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
+	useResponsesAPI bool   // when true, use /v1/responses for direct OpenAI
+	client          *http.Client
+	retryConfig     RetryConfig
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -57,10 +58,18 @@ func (p *OpenAIProvider) SupportsThinking() bool { return true }
 func (p *OpenAIProvider) APIKey() string         { return p.apiKey }
 func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
 func (p *OpenAIProvider) ProviderType() string   { return p.providerType }
+func (p *OpenAIProvider) UseResponsesAPI() bool  { return p.useResponsesAPI }
 
 // WithProviderType sets the DB provider_type for correct API endpoint routing in media tools.
 func (p *OpenAIProvider) WithProviderType(pt string) *OpenAIProvider {
 	p.providerType = pt
+	return p
+}
+
+// WithResponsesAPI enables the OpenAI Responses API (/v1/responses) instead of Chat Completions.
+// Only use for direct OpenAI API (api.openai.com), not for Groq/OpenRouter/DeepSeek/etc.
+func (p *OpenAIProvider) WithResponsesAPI(use bool) *OpenAIProvider {
+	p.useResponsesAPI = use
 	return p
 }
 
@@ -78,6 +87,10 @@ func (p *OpenAIProvider) resolveModel(model string) string {
 }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
+	if p.useResponsesAPI {
+		return p.chatResponses(ctx, req)
+	}
+
 	model := p.resolveModel(req.Model)
 	body := p.buildRequestBody(model, req, false)
 
@@ -116,6 +129,10 @@ func (p *OpenAIProvider) chatRequestFn(ctx context.Context, body map[string]any)
 }
 
 func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
+	if p.useResponsesAPI {
+		return p.chatStreamResponses(ctx, req, onChunk)
+	}
+
 	model := p.resolveModel(req.Model)
 	body := p.buildRequestBody(model, req, true)
 
@@ -484,6 +501,77 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 	}
 
 	return result
+}
+
+// --- Responses API methods (used when useResponsesAPI=true) ---
+
+// chatResponses handles non-streaming requests via the Responses API.
+func (p *OpenAIProvider) chatResponses(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
+	body := buildResponsesRequestBody(req, p.defaultModel, false)
+
+	resp, err := RetryDo(ctx, p.retryConfig, func() (*ChatResponse, error) {
+		respBody, err := p.doResponsesRequest(ctx, body)
+		if err != nil {
+			return nil, err
+		}
+		defer respBody.Close()
+		return parseResponsesBody(respBody, p.name)
+	})
+	return resp, err
+}
+
+// chatStreamResponses handles streaming requests via the Responses API.
+func (p *OpenAIProvider) chatStreamResponses(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
+	body := buildResponsesRequestBody(req, p.defaultModel, true)
+
+	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
+		return p.doResponsesRequest(ctx, body)
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer respBody.Close()
+
+	return parseResponsesStream(respBody, p.name, onChunk)
+}
+
+// doResponsesRequest sends a request to the OpenAI Responses API endpoint.
+func (p *OpenAIProvider) doResponsesRequest(ctx context.Context, body any) (io.ReadCloser, error) {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("%s: marshal request: %w", p.name, err)
+	}
+
+	endpoint := p.apiBase + "/responses"
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("%s: create request: %w", p.name, err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	if strings.Contains(strings.ToLower(p.apiBase), "azure.com") {
+		httpReq.Header.Set("api-key", p.apiKey)
+	} else {
+		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("%s: request failed: %w", p.name, err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		retryAfter := ParseRetryAfter(resp.Header.Get("Retry-After"))
+		return nil, &HTTPError{
+			Status:     resp.StatusCode,
+			Body:       fmt.Sprintf("%s: %s", p.name, string(respBody)),
+			RetryAfter: retryAfter,
+		}
+	}
+
+	return resp.Body, nil
 }
 
 // maxTokensLimitRe matches "supports at most N completion tokens" from OpenAI 400 errors.

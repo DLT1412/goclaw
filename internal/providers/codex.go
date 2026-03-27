@@ -1,10 +1,7 @@
 package providers
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -91,126 +88,5 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	}
 	defer respBody.Close()
 
-	result := &ChatResponse{FinishReason: "stop"}
-	toolCalls := make(map[string]*codexToolCallAcc) // keyed by item_id
-
-	scanner := bufio.NewScanner(respBody)
-	scanner.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data:")
-		data = strings.TrimPrefix(data, " ")
-		if data == "[DONE]" {
-			break
-		}
-
-		var event codexSSEEvent
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			continue
-		}
-
-		p.processSSEEvent(&event, result, toolCalls, onChunk)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("%s: stream read error: %w", p.name, err)
-	}
-
-	// Build tool calls from accumulators
-	for _, acc := range toolCalls {
-		if acc.name == "" {
-			continue
-		}
-		args := make(map[string]any)
-		_ = json.Unmarshal([]byte(acc.rawArgs), &args)
-		result.ToolCalls = append(result.ToolCalls, ToolCall{
-			ID:        acc.callID,
-			Name:      acc.name,
-			Arguments: args,
-		})
-	}
-
-	if len(result.ToolCalls) > 0 {
-		result.FinishReason = "tool_calls"
-	}
-
-	if onChunk != nil {
-		onChunk(StreamChunk{Done: true})
-	}
-
-	return result, nil
-}
-
-// processSSEEvent handles a single SSE event during streaming.
-func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatResponse, toolCalls map[string]*codexToolCallAcc, onChunk func(StreamChunk)) {
-	switch event.Type {
-	case "response.output_text.delta":
-		if event.Delta != "" {
-			result.Content += event.Delta
-			if onChunk != nil {
-				onChunk(StreamChunk{Content: event.Delta})
-			}
-		}
-
-	case "response.function_call_arguments.delta":
-		if event.ItemID != "" {
-			acc := toolCalls[event.ItemID]
-			if acc == nil {
-				acc = &codexToolCallAcc{}
-				toolCalls[event.ItemID] = acc
-			}
-			acc.rawArgs += event.Delta
-		}
-
-	case "response.output_item.done":
-		if event.Item != nil {
-			switch event.Item.Type {
-			case "message":
-				if event.Item.Phase != "" {
-					result.Phase = event.Item.Phase
-				}
-			case "function_call":
-				acc := toolCalls[event.Item.ID]
-				if acc == nil {
-					acc = &codexToolCallAcc{}
-				}
-				acc.callID = event.Item.CallID
-				acc.name = event.Item.Name
-				if event.Item.Arguments != "" {
-					acc.rawArgs = event.Item.Arguments
-				}
-				toolCalls[event.Item.ID] = acc
-			case "reasoning":
-				for _, s := range event.Item.Summary {
-					if s.Text != "" {
-						result.Thinking += s.Text
-						if onChunk != nil {
-							onChunk(StreamChunk{Thinking: s.Text})
-						}
-					}
-				}
-			}
-		}
-
-	case "response.completed", "response.incomplete", "response.failed":
-		if event.Response != nil {
-			if event.Response.Usage != nil {
-				u := event.Response.Usage
-				result.Usage = &Usage{
-					PromptTokens:     u.InputTokens,
-					CompletionTokens: u.OutputTokens,
-					TotalTokens:      u.TotalTokens,
-				}
-				if u.OutputTokensDetails != nil {
-					result.Usage.ThinkingTokens = u.OutputTokensDetails.ReasoningTokens
-				}
-			}
-			if event.Response.Status == "incomplete" {
-				result.FinishReason = "length"
-			}
-		}
-	}
+	return parseResponsesStream(respBody, p.name, onChunk)
 }

@@ -181,6 +181,9 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		if p.ProviderType == store.ProviderMiniMax {
 			prov.WithChatPath("/text/chatcompletion_v2")
 		}
+		if providers.IsDirectOpenAI(apiBase) {
+			prov.WithResponsesAPI(true)
+		}
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	}
 }

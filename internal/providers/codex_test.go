@@ -31,9 +31,9 @@ func mustJSON(v any) string {
 // writeSSEDone writes a minimal SSE response with just a completed event and [DONE].
 func writeSSEDone(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/event-stream")
-	fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+	fmt.Fprintf(w, "data: %s\n\n", mustJSON(responsesSSEEvent{
 		Type:     "response.completed",
-		Response: &codexAPIResponse{ID: "resp-1", Status: "completed"},
+		Response: &responsesAPIResponse{ID: "resp-1", Status: "completed"},
 	}))
 	fmt.Fprint(w, "data: [DONE]\n\n")
 }
@@ -256,16 +256,16 @@ func TestCodexProviderChat(t *testing.T) {
 
 		// Return SSE mock response (Chat delegates to ChatStream)
 		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{Type: "response.output_text.delta", Delta: "Hello! I'm doing great."}))
-		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(responsesSSEEvent{Type: "response.output_text.delta", Delta: "Hello! I'm doing great."}))
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(responsesSSEEvent{
 			Type: "response.output_item.done",
-			Item: &codexItem{Type: "message", Role: "assistant"},
+			Item: &responsesItem{Type: "message", Role: "assistant"},
 		}))
-		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(responsesSSEEvent{
 			Type: "response.completed",
-			Response: &codexAPIResponse{
+			Response: &responsesAPIResponse{
 				ID: "resp-123", Status: "completed",
-				Usage: &codexUsage{InputTokens: 10, OutputTokens: 8, TotalTokens: 18},
+				Usage: &responsesUsage{InputTokens: 10, OutputTokens: 8, TotalTokens: 18},
 			},
 		}))
 		fmt.Fprint(w, "data: [DONE]\n\n")
@@ -394,9 +394,9 @@ func TestCodexProviderChatStreamToolCalls(t *testing.T) {
 func TestCodexProviderChatToolCallsNonStream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(responsesSSEEvent{
 			Type: "response.output_item.done",
-			Item: &codexItem{
+			Item: &responsesItem{
 				Type:      "function_call",
 				ID:        "item_1",
 				CallID:    "call_xyz",
@@ -404,11 +404,11 @@ func TestCodexProviderChatToolCallsNonStream(t *testing.T) {
 				Arguments: `{"query":"test"}`,
 			},
 		}))
-		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(responsesSSEEvent{
 			Type: "response.completed",
-			Response: &codexAPIResponse{
+			Response: &responsesAPIResponse{
 				ID: "resp-456", Status: "completed",
-				Usage: &codexUsage{InputTokens: 5, OutputTokens: 3, TotalTokens: 8},
+				Usage: &responsesUsage{InputTokens: 5, OutputTokens: 3, TotalTokens: 8},
 			},
 		}))
 		fmt.Fprint(w, "data: [DONE]\n\n")

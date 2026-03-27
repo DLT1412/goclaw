@@ -36,8 +36,12 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 	}
 
 	if cfg.Providers.OpenAI.APIKey != "" {
-		registry.Register(providers.NewOpenAIProvider("openai", cfg.Providers.OpenAI.APIKey, cfg.Providers.OpenAI.APIBase, "gpt-4o"))
-		slog.Info("registered provider", "name", "openai")
+		oai := providers.NewOpenAIProvider("openai", cfg.Providers.OpenAI.APIKey, cfg.Providers.OpenAI.APIBase, "gpt-4o")
+		if providers.IsDirectOpenAI(cfg.Providers.OpenAI.APIBase) || cfg.Providers.OpenAI.APIBase == "" {
+			oai.WithResponsesAPI(true)
+		}
+		registry.Register(oai)
+		slog.Info("registered provider", "name", "openai", "responses_api", oai.UseResponsesAPI())
 	}
 
 	if cfg.Providers.OpenRouter.APIKey != "" {
@@ -346,6 +350,9 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov.WithProviderType(p.ProviderType)
 			if p.ProviderType == store.ProviderMiniMax {
 				prov.WithChatPath("/text/chatcompletion_v2")
+			}
+			if providers.IsDirectOpenAI(p.APIBase) {
+				prov.WithResponsesAPI(true)
 			}
 			registry.RegisterForTenant(p.TenantID, prov)
 		}
