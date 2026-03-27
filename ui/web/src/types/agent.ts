@@ -47,6 +47,16 @@ export interface ContextPruningConfig {
   };
 }
 
+export interface K8sSandboxConfig {
+  namespace?: string;
+  service_account?: string;
+  pvc_template?: string;
+  max_pod_lifetime_sec?: number;
+  node_selector?: Record<string, string>;
+  image_pull_secrets?: string[];
+  pod_labels?: Record<string, string>;
+}
+
 export interface SandboxConfig {
   mode?: "off" | "non-main" | "all";
   image?: string;
@@ -56,6 +66,9 @@ export interface SandboxConfig {
   cpus?: number;
   timeout_sec?: number;
   network_enabled?: boolean;
+  backend?: "docker" | "k8s";
+  idle_timeout_min?: number;
+  k8s?: K8sSandboxConfig;
 }
 
 export interface MemoryConfig {

@@ -378,7 +378,22 @@
       "timeout": "Timeout (sec)",
       "memoryMb": "Memory (MB)",
       "cpus": "CPUs",
-      "networkEnabled": "Network Enabled"
+      "networkEnabled": "Network Enabled",
+      "backend": "Backend",
+      "backendTip": "Runtime for sandbox execution. Docker for local dev, K8s for production clusters.",
+      "idleTimeoutMin": "Idle Timeout (min)",
+      "idleTimeoutMinTip": "Delete sandbox pod after N minutes of inactivity. Default: 20.",
+      "k8s": {
+        "title": "Kubernetes Settings",
+        "namespace": "Namespace",
+        "namespaceTip": "K8s namespace for sandbox pods. Must be pre-created.",
+        "pvcTemplate": "PVC Template",
+        "pvcTemplateTip": "PVC name pattern. Use {tenant_id} placeholder.",
+        "maxPodLifetimeSec": "Max Pod Lifetime (sec)",
+        "maxPodLifetimeSecTip": "Absolute max pod lifetime. Hard cap: 28800 (8h). Default: 3600.",
+        "serviceAccount": "Service Account",
+        "serviceAccountTip": "K8s service account for sandbox pods."
+      }
     },
     "memory": {
       "title": "Memory",

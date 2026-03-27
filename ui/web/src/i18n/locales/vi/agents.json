@@ -378,7 +378,22 @@
       "timeout": "Hết giờ (giây)",
       "memoryMb": "Bộ nhớ (MB)",
       "cpus": "CPU",
-      "networkEnabled": "Bật mạng"
+      "networkEnabled": "Bật mạng",
+      "backend": "Backend",
+      "backendTip": "Runtime để thực thi sandbox. Docker cho dev local, K8s cho cluster production.",
+      "idleTimeoutMin": "Idle Timeout (phút)",
+      "idleTimeoutMinTip": "Xóa sandbox pod sau N phút không hoạt động. Mặc định: 20.",
+      "k8s": {
+        "title": "Cài đặt Kubernetes",
+        "namespace": "Namespace",
+        "namespaceTip": "K8s namespace cho sandbox pods. Phải được tạo trước.",
+        "pvcTemplate": "PVC Template",
+        "pvcTemplateTip": "Tên PVC template. Dùng {tenant_id} placeholder.",
+        "maxPodLifetimeSec": "Pod Lifetime tối đa (giây)",
+        "maxPodLifetimeSecTip": "Thời gian sống tối đa của pod. Giới hạn: 28800 (8h). Mặc định: 3600.",
+        "serviceAccount": "Service Account",
+        "serviceAccountTip": "K8s service account cho sandbox pods."
+      }
     },
     "memory": {
       "title": "Bộ nhớ",

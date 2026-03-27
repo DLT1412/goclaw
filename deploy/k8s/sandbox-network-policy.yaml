@@ -1,0 +1,18 @@
+# Deny all ingress/egress for sandbox and cred-sandbox pods.
+# NOTE: Requires a CNI plugin that supports NetworkPolicy (Calico, Cilium, etc.)
+# Without such a CNI, this policy has NO EFFECT and pods have full network access.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-deny-all
+  namespace: goclaw-sandbox
+spec:
+  podSelector:
+    matchExpressions:
+    - key: role
+      operator: In
+      values: ["sandbox", "sandbox-cred"]
+  policyTypes:
+  - Ingress
+  - Egress
+  # Empty rules = deny all traffic

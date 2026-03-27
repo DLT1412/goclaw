@@ -52,17 +52,49 @@ func setupToolRegistry(
 	toolsReg = tools.NewRegistry()
 	agentCfg = cfg.ResolveAgent("default")
 
-	// Sandbox manager (optional — routes tools through Docker containers)
+	// Sandbox manager (optional — routes tools through Docker containers or K8s pods)
 	if sbCfg := cfg.Agents.Defaults.Sandbox; sbCfg != nil && sbCfg.Mode != "" && sbCfg.Mode != "off" {
-		if err := sandbox.CheckDockerAvailable(context.Background()); err != nil {
-			slog.Warn("sandbox disabled: Docker not available",
-				"configured_mode", sbCfg.Mode,
-				"error", err,
+		resolved := sbCfg.ToSandboxConfig()
+
+		switch resolved.Backend {
+		case sandbox.BackendK8s:
+			if err := validateK8sSandboxConfig(resolved); err != nil {
+				slog.Error("sandbox k8s validation failed", "error", err)
+				os.Exit(1)
+			}
+			clientset, restConfig, err := initK8sClient()
+			if err != nil {
+				slog.Error("sandbox k8s client init failed", "error", err)
+				os.Exit(1)
+			}
+			ownerRef := resolveGatewayOwnerRef(context.Background(), clientset)
+			k8sMgr := sandbox.NewK8sManager(clientset, restConfig, resolved, ownerRef)
+			if err := k8sMgr.RecoverOrphans(context.Background()); err != nil {
+				slog.Warn("sandbox k8s orphan recovery failed", "error", err)
+			}
+			sandboxMgr = k8sMgr
+			slog.Info("sandbox enabled (k8s)",
+				"mode", string(resolved.Mode),
+				"namespace", resolved.K8s.Namespace,
+				"image", resolved.Image,
+				"scope", string(resolved.Scope),
+				"idle_timeout_min", resolved.IdleTimeoutMin,
 			)
-		} else {
-			resolved := sbCfg.ToSandboxConfig()
-			sandboxMgr = sandbox.NewDockerManager(resolved)
-			slog.Info("sandbox enabled", "mode", string(resolved.Mode), "image", resolved.Image, "scope", string(resolved.Scope))
+
+		default: // BackendDocker
+			if err := sandbox.CheckDockerAvailable(context.Background()); err != nil {
+				slog.Warn("sandbox disabled: Docker not available",
+					"configured_mode", sbCfg.Mode,
+					"error", err,
+				)
+			} else {
+				sandboxMgr = sandbox.NewDockerManager(resolved)
+				slog.Info("sandbox enabled (docker)",
+					"mode", string(resolved.Mode),
+					"image", resolved.Image,
+					"scope", string(resolved.Scope),
+				)
+			}
 		}
 	}
 

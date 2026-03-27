@@ -1,0 +1,15 @@
+# Optional: prevent sandbox pods from consuming unbounded cluster resources.
+# Adjust limits based on expected concurrency and tenant count.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sandbox-limits
+  namespace: goclaw-sandbox
+spec:
+  hard:
+    pods: "50"
+    requests.cpu: "20"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 20Gi
+    secrets: "100"

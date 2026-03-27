@@ -1,0 +1,10 @@
+# Namespace for sandbox pods with Pod Security Standards (Restricted profile).
+# Enforces: non-root, drop ALL caps, read-only root FS, no privilege escalation.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: goclaw-sandbox
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

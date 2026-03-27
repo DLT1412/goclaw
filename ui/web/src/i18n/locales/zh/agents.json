@@ -378,7 +378,22 @@
       "timeout": "超时（秒）",
       "memoryMb": "内存（MB）",
       "cpus": "CPU",
-      "networkEnabled": "启用网络"
+      "networkEnabled": "启用网络",
+      "backend": "后端",
+      "backendTip": "沙箱执行运行时。Docker 用于本地开发，K8s 用于生产集群。",
+      "idleTimeoutMin": "空闲超时（分钟）",
+      "idleTimeoutMinTip": "N 分钟无活动后删除沙箱 Pod。默认：20。",
+      "k8s": {
+        "title": "Kubernetes 设置",
+        "namespace": "命名空间",
+        "namespaceTip": "沙箱 Pod 的 K8s 命名空间。必须预先创建。",
+        "pvcTemplate": "PVC 模板",
+        "pvcTemplateTip": "PVC 名称模式。使用 {tenant_id} 占位符。",
+        "maxPodLifetimeSec": "Pod 最大生命周期（秒）",
+        "maxPodLifetimeSecTip": "Pod 绝对最大生命周期。硬限制：28800（8小时）。默认：3600。",
+        "serviceAccount": "服务账户",
+        "serviceAccountTip": "沙箱 Pod 的 K8s 服务账户。"
+      }
     },
     "memory": {
       "title": "记忆",

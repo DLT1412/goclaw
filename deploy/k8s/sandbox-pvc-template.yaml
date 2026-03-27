@@ -1,0 +1,15 @@
+# Example PVC for a tenant. Admin creates one per tenant.
+# Name must match the pvc_template config (e.g. "sandbox-{tenant_id}").
+# Adjust storageClassName and storage size per your cluster.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sandbox-example-tenant
+  namespace: goclaw-sandbox
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 10Gi

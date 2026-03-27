@@ -237,7 +237,18 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid gap-1.5">
+              <InfoLabel tip={t("agents.sandbox.backendTip")}>{t("agents.sandbox.backend")}</InfoLabel>
+              <Select value={sandbox.backend ?? "docker"} onValueChange={(v) => updateNested("sandbox", { backend: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="docker">Docker</SelectItem>
+                  <SelectItem value="k8s">Kubernetes (K8s)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Field label={t("agents.sandbox.image")} tip={t("agents.sandbox.imageTip")} value={sandbox.image} onChange={(v) => updateNested("sandbox", { image: v })} placeholder="goclaw-sandbox:bookworm-slim" />
+            <Field label={t("agents.sandbox.idleTimeoutMin")} tip={t("agents.sandbox.idleTimeoutMinTip")} type="number" value={sandbox.idle_timeout_min} onChange={(v) => updateNested("sandbox", { idle_timeout_min: Number(v) })} placeholder="20" />
             <Field label={t("agents.sandbox.memoryMb")} tip={t("agents.sandbox.memoryMbTip")} type="number" value={sandbox.memory_mb} onChange={(v) => updateNested("sandbox", { memory_mb: Number(v) })} placeholder="512" />
             <Field label={t("agents.sandbox.cpus")} tip={t("agents.sandbox.cpusTip")} type="number" step="0.5" value={sandbox.cpus} onChange={(v) => updateNested("sandbox", { cpus: Number(v) })} placeholder="1.0" />
             <Field label={t("agents.sandbox.timeoutSec")} tip={t("agents.sandbox.timeoutSecTip")} type="number" value={sandbox.timeout_sec} onChange={(v) => updateNested("sandbox", { timeout_sec: Number(v) })} placeholder="300" />
@@ -246,6 +257,17 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
               <Switch checked={sandbox.network_enabled ?? false} onCheckedChange={(v) => updateNested("sandbox", { network_enabled: v })} />
             </div>
           </div>
+          {(sandbox.backend ?? "docker") === "k8s" && (
+            <div className="rounded-md border px-3 py-3 space-y-3 mt-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("agents.sandbox.k8s.title")}</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label={t("agents.sandbox.k8s.namespace")} tip={t("agents.sandbox.k8s.namespaceTip")} value={sandbox.k8s?.namespace} onChange={(v) => updateNested("sandbox", { k8s: { ...(sandbox.k8s ?? {}), namespace: v || undefined } })} placeholder="default" />
+                <Field label={t("agents.sandbox.k8s.serviceAccount")} tip={t("agents.sandbox.k8s.serviceAccountTip")} value={sandbox.k8s?.service_account} onChange={(v) => updateNested("sandbox", { k8s: { ...(sandbox.k8s ?? {}), service_account: v || undefined } })} placeholder="default" />
+                <Field label={t("agents.sandbox.k8s.pvcTemplate")} tip={t("agents.sandbox.k8s.pvcTemplateTip")} value={sandbox.k8s?.pvc_template} onChange={(v) => updateNested("sandbox", { k8s: { ...(sandbox.k8s ?? {}), pvc_template: v || undefined } })} placeholder="sandbox-{tenant_id}" />
+                <Field label={t("agents.sandbox.k8s.maxPodLifetimeSec")} tip={t("agents.sandbox.k8s.maxPodLifetimeSecTip")} type="number" value={sandbox.k8s?.max_pod_lifetime_sec} onChange={(v) => updateNested("sandbox", { k8s: { ...(sandbox.k8s ?? {}), max_pod_lifetime_sec: Number(v) } })} placeholder="3600" />
+              </div>
+            </div>
+          )}
         </SubSection>
 
         {dirty && (

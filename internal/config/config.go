@@ -187,11 +187,23 @@ type MemoryConfig struct {
 	MinScore          float64 `json:"min_score,omitempty"`          // minimum relevance score (default 0.35)
 }
 
-// SandboxConfig configures Docker-based sandbox execution.
+// K8sSandboxConfig holds Kubernetes-specific sandbox settings (nested under sandbox.k8s).
+type K8sSandboxConfig struct {
+	Namespace         string            `json:"namespace,omitempty"`            // K8s namespace for sandbox pods (required)
+	ServiceAccount    string            `json:"service_account,omitempty"`      // pod service account (default "sandbox-runner")
+	PVCTemplate       string            `json:"pvc_template,omitempty"`         // PVC name pattern, e.g. "sandbox-{tenant_id}"
+	MaxPodLifetimeSec int               `json:"max_pod_lifetime_sec,omitempty"` // activeDeadlineSeconds (default 3600, max 28800)
+	NodeSelector      map[string]string `json:"node_selector,omitempty"`        // pod node selector labels
+	ImagePullSecrets  []string          `json:"image_pull_secrets,omitempty"`   // image pull secret names
+	PodLabels         map[string]string `json:"pod_labels,omitempty"`           // custom pod labels (goclaw.io/ prefix reserved)
+}
+
+// SandboxConfig configures sandbox execution (Docker or Kubernetes).
 // Matching TS agents.defaults.sandbox.
 type SandboxConfig struct {
 	Mode            string            `json:"mode,omitempty"`             // "off" (default), "non-main", "all"
-	Image           string            `json:"image,omitempty"`            // Docker image (default: "goclaw-sandbox:bookworm-slim")
+	Backend         string            `json:"backend,omitempty"`          // "docker" (default), "k8s"
+	Image           string            `json:"image,omitempty"`            // container image (default: "goclaw-sandbox:bookworm-slim")
 	WorkspaceAccess string            `json:"workspace_access,omitempty"` // "none", "ro", "rw" (default)
 	Scope           string            `json:"scope,omitempty"`            // "session" (default), "agent", "shared"
 	MemoryMB        int               `json:"memory_mb,omitempty"`        // memory limit in MB (default 512)
@@ -201,16 +213,20 @@ type SandboxConfig struct {
 	ReadOnlyRoot    *bool             `json:"read_only_root,omitempty"`   // read-only root fs (default true)
 	SetupCommand    string            `json:"setup_command,omitempty"`    // run once after container creation
 	Env             map[string]string `json:"env,omitempty"`              // extra environment variables
+	IdleTimeoutMin  int               `json:"idle_timeout_min,omitempty"` // K8s pod idle timeout in min (default 20)
 
 	// Enhanced security
 	User           string `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
 	TmpfsSizeMB    int    `json:"tmpfs_size_mb,omitempty"`    // default tmpfs size in MB (0 = Docker default)
 	MaxOutputBytes int    `json:"max_output_bytes,omitempty"` // limit exec output capture (default 1MB)
 
-	// Pruning (matching TS SandboxPruneSettings)
+	// Pruning (Docker backend — matching TS SandboxPruneSettings)
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
 	MaxAgeDays       int `json:"max_age_days,omitempty"`       // prune containers older than N days (default 7)
 	PruneIntervalMin int `json:"prune_interval_min,omitempty"` // check interval in minutes (default 5)
+
+	// Kubernetes backend
+	K8s *K8sSandboxConfig `json:"k8s,omitempty"`
 }
 
 // ToSandboxConfig converts config.SandboxConfig → sandbox.Config with defaults applied.
@@ -280,7 +296,7 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 		cfg.MaxOutputBytes = sc.MaxOutputBytes
 	}
 
-	// Pruning
+	// Pruning (Docker backend)
 	if sc.IdleHours > 0 {
 		cfg.IdleHours = sc.IdleHours
 	}
@@ -289,6 +305,32 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 	}
 	if sc.PruneIntervalMin > 0 {
 		cfg.PruneIntervalMin = sc.PruneIntervalMin
+	}
+
+	// Backend selection
+	switch sc.Backend {
+	case "k8s":
+		cfg.Backend = sandbox.BackendK8s
+	default:
+		cfg.Backend = sandbox.BackendDocker
+	}
+
+	// K8s idle timeout
+	if sc.IdleTimeoutMin > 0 {
+		cfg.IdleTimeoutMin = sc.IdleTimeoutMin
+	}
+
+	// K8s sub-config
+	if sc.K8s != nil {
+		cfg.K8s = &sandbox.K8sConfig{
+			Namespace:         sc.K8s.Namespace,
+			ServiceAccount:    sc.K8s.ServiceAccount,
+			PVCTemplate:       sc.K8s.PVCTemplate,
+			MaxPodLifetimeSec: sc.K8s.MaxPodLifetimeSec,
+			NodeSelector:      sc.K8s.NodeSelector,
+			ImagePullSecrets:  sc.K8s.ImagePullSecrets,
+			PodLabels:         sc.K8s.PodLabels,
+		}
 	}
 
 	return cfg

@@ -1,0 +1,65 @@
+# ServiceAccount for sandbox pods — ZERO K8s API permissions.
+# Pods also set automountServiceAccountToken: false.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sandbox-runner
+  namespace: goclaw-sandbox
+---
+# Role: gateway manages sandbox pods, exec, and secrets in sandbox namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: goclaw-sandbox-manager
+  namespace: goclaw-sandbox
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["create", "get", "list", "delete"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create", "get", "delete"]
+---
+# Bind gateway SA (cross-namespace) to sandbox manager role.
+# Adjust 'name' and 'namespace' in subjects to match your gateway deployment.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: goclaw-sandbox-manager
+  namespace: goclaw-sandbox
+subjects:
+- kind: ServiceAccount
+  name: goclaw-gateway
+  namespace: goclaw
+roleRef:
+  kind: Role
+  name: goclaw-sandbox-manager
+  apiGroup: rbac.authorization.k8s.io
+---
+# Role: gateway reads its own pod for ownerReference UID (self-lookup).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: goclaw-self-lookup
+  namespace: goclaw
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: goclaw-self-lookup
+  namespace: goclaw
+subjects:
+- kind: ServiceAccount
+  name: goclaw-gateway
+  namespace: goclaw
+roleRef:
+  kind: Role
+  name: goclaw-self-lookup
+  apiGroup: rbac.authorization.k8s.io

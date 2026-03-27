@@ -1,20 +1,28 @@
-// Package sandbox provides Docker-based code execution isolation.
+// Package sandbox provides isolated code execution via Docker containers or Kubernetes pods.
 //
-// Agents can run tool commands (exec, shell) inside Docker containers
-// instead of the host system. Sandbox modes:
+// Two orthogonal config axes:
+//
+//	sandbox.mode    = "off" | "non-main" | "all"    (which agents get sandboxed)
+//	sandbox.backend = "docker" | "k8s"              (which runtime executes it)
+//
+// Sandbox modes:
 //   - off: no sandboxing, execute directly on host
 //   - non-main: all agents except "main" run in sandbox
 //   - all: every agent runs in sandbox
+//
+// Backends:
+//   - docker: Docker containers (local, default)
+//   - k8s: Kubernetes pods (production, in-cluster)
 //
 // Workspace access levels:
 //   - none: no filesystem access
 //   - ro: read-only workspace mount
 //   - rw: read-write workspace mount
 //
-// Sandbox scope controls container reuse:
-//   - session: one container per session (max isolation)
-//   - agent: shared container per agent
-//   - shared: one container for all agents
+// Sandbox scope controls container/pod reuse:
+//   - session: one container/pod per session (max isolation)
+//   - agent: shared container/pod per agent
+//   - shared: one container/pod for all agents
 package sandbox
 
 import (
@@ -41,19 +49,28 @@ const (
 	AccessRW   Access = "rw"   // read-write
 )
 
-// Scope determines container reuse granularity.
+// Scope determines container/pod reuse granularity.
 type Scope string
 
 const (
-	ScopeSession Scope = "session" // one container per session
-	ScopeAgent   Scope = "agent"   // one container per agent
-	ScopeShared  Scope = "shared"  // one container for all
+	ScopeSession Scope = "session" // one container/pod per session
+	ScopeAgent   Scope = "agent"   // one container/pod per agent
+	ScopeShared  Scope = "shared"  // one container/pod for all
+)
+
+// Backend determines which container runtime executes sandboxes.
+type Backend string
+
+const (
+	BackendDocker Backend = "docker" // Docker containers (default)
+	BackendK8s    Backend = "k8s"    // Kubernetes pods
 )
 
 // Config configures the sandbox system.
 // Matches TS SandboxDockerSettings + SandboxConfig.
 type Config struct {
 	Mode              Mode              `json:"mode"`
+	Backend           Backend           `json:"backend"`
 	Image             string            `json:"image"`
 	WorkspaceAccess   Access            `json:"workspace_access"`
 	Scope             Scope             `json:"scope"`
@@ -80,12 +97,17 @@ type Config struct {
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
 	MaxAgeDays       int `json:"max_age_days,omitempty"`       // prune containers older than N days (default 7)
 	PruneIntervalMin int `json:"prune_interval_min,omitempty"` // check interval in minutes (default 5)
+
+	// K8s-specific (only used when Backend == BackendK8s)
+	IdleTimeoutMin int        `json:"idle_timeout_min,omitempty"` // delete pod after N min idle (default 20)
+	K8s            *K8sConfig `json:"k8s,omitempty"`              // Kubernetes backend config
 }
 
 // DefaultConfig returns sensible defaults matching TS sandbox defaults.
 func DefaultConfig() Config {
 	return Config{
 		Mode:             ModeOff,
+		Backend:          BackendDocker,
 		Image:            "goclaw-sandbox:bookworm-slim",
 		WorkspaceAccess:  AccessRW,
 		Scope:            ScopeSession,
@@ -102,6 +124,7 @@ func DefaultConfig() Config {
 		IdleHours:        24,
 		MaxAgeDays:       7,
 		PruneIntervalMin: 5,
+		IdleTimeoutMin:   20,
 	}
 }
 
@@ -213,6 +236,14 @@ type Manager interface {
 
 	// Stats returns info about active sandboxes.
 	Stats() map[string]any
+}
+
+// CredentialedManager extends Manager with per-session credential pod support.
+// K8s backend uses dedicated cred-pods with K8s Secrets; Docker uses WithEnv.
+type CredentialedManager interface {
+	Manager
+	GetCredentialedPod(ctx context.Context, sessionKey, tenantID string, envMap map[string]string) (Sandbox, error)
+	ReleaseCredentialed(ctx context.Context, sessionKey string) error
 }
 
 // ErrSandboxDisabled is returned when sandbox mode is "off".

@@ -176,11 +176,30 @@ func (t *ExecTool) executeCredentialedHost(ctx context.Context, absPath string, 
 	return formatCredentialedResult(absPath, args, stdout.String(), stderr.String(), err, ctx, timeout)
 }
 
-// executeCredentialedSandbox runs a credentialed command inside a Docker sandbox.
-// Uses sandbox.WithEnv to inject credentials via docker exec -e (no shell).
+// executeCredentialedSandbox runs a credentialed command inside a sandbox.
+// K8s backend: uses cred-pod with K8s Secret (env already in pod).
+// Docker backend: uses sandbox.WithEnv to inject credentials via docker exec -e.
 func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath string, args []string,
 	cwd string, sandboxKey string, envMap map[string]string, timeout time.Duration) *Result {
 
+	// K8s backend: use cred-pod with K8s Secret
+	if cm, ok := t.sandboxMgr.(sandbox.CredentialedManager); ok {
+		tenantID := store.TenantIDFromContext(ctx).String()
+		sb, err := cm.GetCredentialedPod(ctx, sandboxKey, tenantID, envMap)
+		if err != nil {
+			slog.Warn("security.credentialed_exec_k8s_cred_pod_unavailable",
+				"binary", absPath, "error", err)
+			return ErrorResult("credentialed exec: K8s cred-pod unavailable: " + err.Error())
+		}
+		command := append([]string{absPath}, args...)
+		result, err := sb.Exec(ctx, command, cwd) // no WithEnv; env already in pod
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("credentialed k8s exec: %v", err))
+		}
+		return formatCredentialedSandboxResult(absPath, args, result)
+	}
+
+	// Docker backend: use WithEnv
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		slog.Warn("security.credentialed_exec_sandbox_unavailable",
@@ -188,13 +207,16 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 		return ErrorResult("credentialed exec requires sandbox but sandbox is unavailable: " + err.Error())
 	}
 
-	// Direct exec inside sandbox: [absPath, args...] with env injection
 	command := append([]string{absPath}, args...)
 	result, err := sb.Exec(ctx, command, cwd, sandbox.WithEnv(envMap))
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("credentialed sandbox exec: %v", err))
 	}
+	return formatCredentialedSandboxResult(absPath, args, result)
+}
 
+// formatCredentialedSandboxResult formats the output from a sandbox exec result.
+func formatCredentialedSandboxResult(absPath string, args []string, result *sandbox.ExecResult) *Result {
 	output := result.Stdout
 	if result.Stderr != "" {
 		if output != "" {
