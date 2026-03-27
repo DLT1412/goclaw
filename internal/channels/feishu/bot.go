@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -13,16 +14,16 @@ import (
 
 // messageContext holds parsed information from a Feishu message event.
 type messageContext struct {
-	ChatID      string
-	MessageID   string
-	SenderID    string // sender_id.open_id
-	ChatType    string // "p2p" or "group"
-	Content     string
-	ContentType string // "text", "post", "image", etc.
+	ChatID       string
+	MessageID    string
+	SenderID     string // sender_id.open_id
+	ChatType     string // "p2p" or "group"
+	Content      string
+	ContentType  string // "text", "post", "image", etc.
 	MentionedBot bool
-	RootID      string // thread root message ID
-	ParentID    string // parent message ID
-	Mentions    []mentionInfo
+	RootID       string // thread root message ID
+	ParentID     string // parent message ID
+	Mentions     []mentionInfo
 }
 
 type mentionInfo struct {
@@ -191,7 +192,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	// 11. Process media: STT transcription, document extraction, build tags
 	var mediaFiles []bus.MediaFile
 	if len(mediaList) > 0 {
-		var extraContent string
+		var extraContent strings.Builder
 		for i := range mediaList {
 			m := &mediaList[i]
 
@@ -212,7 +213,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 					if err != nil {
 						slog.Warn("feishu: document extraction failed", "file", m.FileName, "error", err)
 					} else if docContent != "" {
-						extraContent += "\n\n" + docContent
+						extraContent.WriteString("\n\n" + docContent)
 					}
 				}
 			}
@@ -235,8 +236,8 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 			}
 		}
 
-		if extraContent != "" {
-			content += extraContent
+		if extraContent.String() != "" {
+			content += extraContent.String()
 		}
 	}
 

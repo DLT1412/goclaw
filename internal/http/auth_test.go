@@ -1,6 +1,7 @@
 package http
 
 import (
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,9 +19,7 @@ import (
 func setupTestCache(t *testing.T, keys map[string]*store.APIKeyData) *mockAPIKeyStore {
 	t.Helper()
 	ms := newMockAPIKeyStore()
-	for hash, key := range keys {
-		ms.keys[hash] = key
-	}
+	maps.Copy(ms.keys, keys)
 	pkgAPIKeyCache = newAPIKeyCache(ms, 5*time.Minute)
 	t.Cleanup(func() { pkgAPIKeyCache = nil })
 	return ms

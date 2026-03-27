@@ -333,7 +333,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 
 	var mediaFiles []bus.MediaFile
 	if len(mediaList) > 0 {
-		var extraContent string
+		var extraContent strings.Builder
 		for i := range mediaList {
 			m := &mediaList[i]
 			switch m.Type {
@@ -351,7 +351,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 					if err != nil {
 						slog.Warn("document extraction failed", "file", m.FileName, "error", err)
 					} else if docContent != "" {
-						extraContent += "\n\n" + docContent
+						extraContent.WriteString("\n\n" + docContent)
 					}
 				}
 			case "video", "animation":
@@ -377,8 +377,8 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 				content = fullTags
 			}
 		}
-		if extraContent != "" {
-			content += extraContent
+		if extraContent.String() != "" {
+			content += extraContent.String()
 		}
 	}
 
@@ -537,4 +537,3 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		c.groupHistory.Clear(localKey)
 	}
 }
-
