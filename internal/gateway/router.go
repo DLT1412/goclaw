@@ -145,7 +145,10 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 			// Non-owner with gateway token: resolve tenant via hint or membership
 			hint := params.TenantID
 			if hint == "" {
-				hint = params.TenantScope
+				hint = params.TenantHint
+			}
+			if hint == "" {
+				hint = params.TenantScope // deprecated
 			}
 			tid, errCode := r.resolveTenantHint(ctx, hint, params.UserID)
 			if errCode != "" {
@@ -181,8 +184,8 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 				client.userID = params.UserID
 			}
 			if keyData.TenantID == uuid.Nil {
-				// API key with no tenant → owner scope
-				client.role = permissions.RoleOwner
+				// System-level API keys keep their scope-derived role and may
+				// optionally narrow to a tenant without gaining owner privileges.
 				apiKeyScope := params.TenantID
 				if apiKeyScope == "" {
 					apiKeyScope = params.TenantScope // backward compat
